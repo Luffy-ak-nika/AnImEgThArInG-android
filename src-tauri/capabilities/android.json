@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "android-default",
+  "description": "Android default capabilities",
+  "platforms": ["android"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-print",
+    "opener:default",
+    "sql:default",
+    "store:default",
+    "dialog:default",
+    "fs:default"
+  ]
+}

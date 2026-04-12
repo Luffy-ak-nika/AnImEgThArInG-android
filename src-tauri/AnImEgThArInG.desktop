@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AnImEgThArInG
+GenericName=Anime Streaming Launcher
+Comment=Watch anime from all major streaming sites — ad-free, with proxy support
+Exec=/usr/lib/anihub/anihub-launcher %u
+Icon=an-im-eg-th-ar-in-g
+Terminal=false
+Categories=Network;AudioVideo;Video;
+MimeType=x-scheme-handler/anihub;
+Keywords=anime;streaming;video;manga;
+StartupNotify=true
+StartupWMClass=AnImEgThArInG
