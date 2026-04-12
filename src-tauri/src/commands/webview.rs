@@ -437,9 +437,12 @@ pub async fn check_domain(url: String, proxy_url: Option<String>) -> bool {
 
 #[tauri::command]
 pub fn close_webview(app: AppHandle, label: String) -> Result<(), String> {
+    #[cfg(desktop)]
     if let Some(window) = app.get_webview_window(&label) {
         window.close().map_err(|e: tauri::Error| e.to_string())?;
     }
+    #[cfg(not(desktop))]
+    let _ = (app, label); // no-op — Android manages its own back stack
     Ok(())
 }
 
@@ -478,10 +481,13 @@ pub fn navigate_webview(
     title: String,
     proxy_url: Option<String>,
 ) -> Result<(), String> {
+    // On desktop: close old window, wait, then open new one
+    #[cfg(desktop)]
     if let Some(window) = app.get_webview_window(&label) {
         window.close().map_err(|e: tauri::Error| e.to_string())?;
+        std::thread::sleep(std::time::Duration::from_millis(200));
     }
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    // On Android: just open/navigate directly (no close needed)
     open_site_webview(app, label, url, title, proxy_url)
 }
 
