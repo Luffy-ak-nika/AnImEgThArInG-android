@@ -33,7 +33,6 @@ jobs:
           rustup target add i686-linux-android
           rustup target add x86_64-linux-android
 
-      # Cache key includes source hashes to prevent stale build artifacts
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
@@ -68,8 +67,9 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> $GITHUB_ENV
-          echo "CC_aarch64_linux_android=$ANDROID_HOME/ndk/26.3.11579264/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" >> $GITHUB_ENV
-          echo "AR_aarch64_linux_android=$ANDROID_HOME/ndk/26.3.11579264/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> $GITHUB_ENV
+          NDK_BIN=$ANDROID_HOME/ndk/26.3.11579264/toolchains/llvm/prebuilt/linux-x86_64/bin
+          echo "CC_aarch64_linux_android=$NDK_BIN/aarch64-linux-android24-clang" >> $GITHUB_ENV
+          echo "AR_aarch64_linux_android=$NDK_BIN/llvm-ar" >> $GITHUB_ENV
 
       # ── 6. Tauri CLI ─────────────────────────────────────────────────────────
       - name: Install Tauri CLI
@@ -79,10 +79,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      # ── 8. DIAGNOSTIC: Show exact Rust errors before full build ─────────────
+      # ── 8. DIAGNOSTIC: Rust type-check for Android ──────────────────────────
       - name: Diagnose Android Rust compilation
         run: |
-          echo "====== DIAGNOSTIC: cargo check for aarch64-linux-android ======"
+          echo "====== cargo check for aarch64-linux-android ======"
           cargo check \
             --manifest-path src-tauri/Cargo.toml \
             --target aarch64-linux-android \
@@ -106,64 +106,12 @@ jobs:
       # ── 10. Patch generated Android files ────────────────────────────────────
       - name: Patch Android files (back button + keyboard resize)
         run: |
-          # --- 1. Patch MainActivity.kt: back button navigates WebView history ---
           MAIN_ACT=$(find src-tauri/gen/android -name "MainActivity.kt" | head -1)
-          echo "Patching MainActivity: $MAIN_ACT"
-          python3 -c "
-path = '$MAIN_ACT'
-with open(path) as f: content = f.read()
-
-back_patch = '''
-    // Find the Tauri WebView anywhere in the view hierarchy
-    private fun findWebView(v: android.view.View): android.webkit.WebView? {
-        if (v is android.webkit.WebView) return v
-        val g = v as? android.view.ViewGroup ?: return null
-        for (i in 0 until g.childCount) {
-            val r = findWebView(g.getChildAt(i)); if (r != null) return r
-        }
-        return null
-    }
-
-    @Deprecated(\"Deprecated in Java\")
-    override fun onBackPressed() {
-        val wv = findWebView(window.decorView)
-        if (wv != null && wv.canGoBack()) { wv.goBack() }
-        else { super.onBackPressed() }
-    }
-'''
-
-if 'onBackPressed' not in content:
-    content = content.replace('class MainActivity : TauriActivity() {',
-        'class MainActivity : TauriActivity() {' + back_patch, 1)
-    open(path, 'w').write(content)
-    print('Patched MainActivity.kt (back button)')
-else:
-    print('Already patched')
-"
-
-          # --- 2. Patch AndroidManifest.xml: keyboard resize mode ---
           MANIFEST=$(find src-tauri/gen/android -name "AndroidManifest.xml" | head -1)
-          echo "Patching AndroidManifest: $MANIFEST"
-          python3 -c "
-import re
-path = '$MANIFEST'
-with open(path) as f: content = f.read()
-# Set windowSoftInputMode to adjustResize so keyboard shrinks WebView
-# and our dvh CSS units adapt the layout correctly
-content = re.sub(
-    r'android:windowSoftInputMode=\"[^\"]*\"',
-    'android:windowSoftInputMode=\"adjustResize\"',
-    content
-)
-# Fallback: if the attribute doesn't exist at all, add it to the activity tag
-if 'adjustResize' not in content:
-    content = content.replace(
-        'android:name=\".MainActivity\"',
-        'android:name=\".MainActivity\" android:windowSoftInputMode=\"adjustResize\"'
-    )
-open(path, 'w').write(content)
-print('Patched AndroidManifest.xml (keyboard resize)')
-"
+          echo "Patching: $MAIN_ACT"
+          python3 .github/scripts/patch_main.py "$MAIN_ACT"
+          echo "Patching: $MANIFEST"
+          python3 .github/scripts/patch_manifest.py "$MANIFEST"
 
       # ── 11. Build APK ─────────────────────────────────────────────────────────
       - name: Build Android APK (debug)
@@ -174,14 +122,14 @@ print('Patched AndroidManifest.xml (keyboard resize)')
           CC_aarch64_linux_android: ${{ env.CC_aarch64_linux_android }}
           AR_aarch64_linux_android: ${{ env.AR_aarch64_linux_android }}
 
-      # ── 11. Find and upload APK ──────────────────────────────────────────────
+      # ── 12. Find and upload APK ──────────────────────────────────────────────
       - name: Find APK file
         id: find_apk
         run: |
           APK_PATH=$(find src-tauri/gen/android -name "*.apk" | head -1)
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK: $APK_PATH"
-          ls -lh "$APK_PATH" 2>/dev/null || echo "APK not found at expected path"
+          ls -lh "$APK_PATH" 2>/dev/null || echo "APK not found"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
