@@ -13,6 +13,19 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
 (function() {
     'use strict';
 
+    // ── Do NOT inject chrome on the AniHub app UI itself ─────────────────
+    const host = location.hostname;
+    const proto = location.protocol;
+    if (host === 'localhost' || host === 'tauri.localhost' ||
+        proto === 'tauri:' || proto === 'asset:' ||
+        location.href.startsWith('https://tauri.localhost')) {
+        return;
+    }
+    // Also skip about:blank, data: and blob: pages
+    if (!location.href.startsWith('http')) return;
+
+    if (document.getElementById('ang-brave-chrome')) return; // already injected
+
     // ─── Shields: real-time blocked count ───────────────────────────────────
     let blockedCount = 0;
     function incBlocked() {
@@ -113,7 +126,7 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         img[src*="/new."], img[src*="new-"], img[alt="new"], img[alt="NEW"] {
             display: none !important; pointer-events: none !important; visibility: hidden !important;
         }
-        body { padding-top: 52px !important; padding-bottom: 58px !important; }
+        body { padding-top: calc(52px + env(safe-area-inset-top, 0px)) !important; padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)) !important; }
     `;
     (document.head || document.documentElement).appendChild(adStyle);
 
@@ -183,10 +196,12 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
             #ang-brave-chrome * { box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
             #ang-brave-chrome {
                 position: fixed; top: 0; left: 0; right: 0; z-index: 2147483647;
-                height: 52px; background: var(--brave-bg);
+                height: calc(52px + env(safe-area-inset-top, 0px));
+                padding-top: env(safe-area-inset-top, 0px);
+                background: var(--brave-bg);
                 backdrop-filter: blur(20px) saturate(200%); -webkit-backdrop-filter: blur(20px) saturate(200%);
                 border-bottom: 1px solid var(--brave-border);
-                display: flex; align-items: center; gap: 4px; padding: 0 10px;
+                display: flex; align-items: center; gap: 4px; padding-left: 10px; padding-right: 10px;
                 box-shadow: 0 2px 12px rgba(0,0,0,0.4);
             }
             .ang-ib { display:flex; align-items:center; justify-content:center; width:40px; height:40px;
@@ -215,11 +230,11 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
             #ang-menu:active { background:rgba(255,255,255,0.1); }
             /* Bottom bar */
             #ang-bot { position:fixed; bottom:0; left:0; right:0; z-index:2147483646;
-                height:56px; background:var(--brave-bg);
+                height:calc(56px + env(safe-area-inset-bottom, 0px)); background:var(--brave-bg);
                 backdrop-filter:blur(20px) saturate(200%); -webkit-backdrop-filter:blur(20px) saturate(200%);
                 border-top:1px solid var(--brave-border);
                 display:flex; align-items:center; justify-content:space-around; padding:0 4px;
-                padding-bottom:env(safe-area-inset-bottom,0); }
+                padding-bottom:env(safe-area-inset-bottom, 0px); }
             .ang-bb { display:flex; flex-direction:column; align-items:center; gap:3px; flex:1;
                 padding:6px 0; border:none; background:transparent; cursor:pointer; color:var(--brave-muted);
                 -webkit-tap-highlight-color:transparent; border-radius:12px; }
@@ -327,6 +342,31 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
     }
 
     console.log('[AnImEgThArInG] 🛡️ Brave Chrome + Shield v3 active');
+
+    // ── Android: ensure viewport-fit=cover so safe-area-inset-top is correct ──
+    (function fixViewport() {
+        const vp = document.querySelector('meta[name="viewport"]');
+        if (vp && !vp.content.includes('viewport-fit')) {
+            vp.setAttribute('content', vp.content + ', viewport-fit=cover');
+        } else if (!vp) {
+            const m = document.createElement('meta');
+            m.name = 'viewport'; m.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+            (document.head || document.documentElement).appendChild(m);
+        }
+    })();
+
+    // ── Android back gesture: go to history.back() instead of exiting app ──
+    setTimeout(function() {
+        try {
+            if (window.__TAURI__ && window.__TAURI__.event) {
+                window.__TAURI__.event.listen('tauri://back-navigation', function() {
+                    if (window.history.length > 1) {
+                        window.history.back();
+                    }
+                });
+            }
+        } catch(e) {}
+    }, 800);
 })();
 "#;
 
@@ -338,11 +378,24 @@ pub fn open_site_webview(
     title: String,
     proxy_url: Option<String>,
 ) -> Result<(), String> {
-    // If window already open, bring it forward (desktop only — mobile is always in focus)
+    // On Android: navigate the MAIN WebviewWindow to the site URL.
+    // Creating new WebviewWindows stacks them visually causing double-chrome.
+    #[cfg(not(desktop))]
+    {
+        let _ = (label, title); // not used on mobile
+        let _ = proxy_url;
+        if let Some(main_win) = app.get_webview_window("main") {
+            // Sanitise the URL for JS string embedding
+            let safe_url = url.replace('\\', "\\\\").replace('"', "\\\"");
+            let _ = main_win.eval(&format!("location.href=\"{}\";", safe_url));
+        }
+        return Ok(());
+    }
+
+    // Desktop: use existing window if already open
+    #[cfg(desktop)]
     if let Some(existing) = app.get_webview_window(&label) {
-        #[cfg(desktop)]
         let _ = existing.set_focus();
-        let _ = existing; // suppress unused warning on mobile
         return Ok(());
     }
 
@@ -442,7 +495,13 @@ pub fn close_webview(app: AppHandle, label: String) -> Result<(), String> {
         window.close().map_err(|e: tauri::Error| e.to_string())?;
     }
     #[cfg(not(desktop))]
-    let _ = (app, label); // no-op — Android manages its own back stack
+    {
+        let _ = label;
+        // On Android: go back in history to return to app UI
+        if let Some(main_win) = app.get_webview_window("main") {
+            let _ = main_win.eval("if(history.length>1){history.back();}else{location.href='/'}");
+        }
+    }
     Ok(())
 }
 
@@ -481,14 +540,19 @@ pub fn navigate_webview(
     title: String,
     proxy_url: Option<String>,
 ) -> Result<(), String> {
+    // On Android: just navigate — no separate windows to close first
+    #[cfg(not(desktop))]
+    return open_site_webview(app, label, url, title, proxy_url);
+
     // On desktop: close old window, wait, then open new one
     #[cfg(desktop)]
-    if let Some(window) = app.get_webview_window(&label) {
-        window.close().map_err(|e: tauri::Error| e.to_string())?;
-        std::thread::sleep(std::time::Duration::from_millis(200));
+    {
+        if let Some(window) = app.get_webview_window(&label) {
+            window.close().map_err(|e: tauri::Error| e.to_string())?;
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        open_site_webview(app, label, url, title, proxy_url)
     }
-    // On Android: just open/navigate directly (no close needed)
-    open_site_webview(app, label, url, title, proxy_url)
 }
 
 #[tauri::command]
