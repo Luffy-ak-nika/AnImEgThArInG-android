@@ -86,7 +86,7 @@ jobs:
 
       # ── 9. Build APK ─────────────────────────────────────────────────────────
       - name: Build Android APK (debug)
-        run: cargo tauri android build --debug --target aarch64-linux-android
+        run: cargo tauri android build --debug --target aarch64
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           NDK_HOME: ${{ env.NDK_HOME }}
