@@ -113,7 +113,19 @@ jobs:
           echo "Patching: $MANIFEST"
           python3 .github/scripts/patch_manifest.py "$MANIFEST"
 
-      # ── 11. Build APK ─────────────────────────────────────────────────────────
+      # ── 11. Cache Gradle to avoid re-downloading every build ─────────────────
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            src-tauri/gen/android/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ── 12. Build APK ─────────────────────────────────────────────────────────
       - name: Build Android APK (debug)
         run: cargo tauri android build --debug --target aarch64
         env:
@@ -121,6 +133,10 @@ jobs:
           NDK_HOME: ${{ env.NDK_HOME }}
           CC_aarch64_linux_android: ${{ env.CC_aarch64_linux_android }}
           AR_aarch64_linux_android: ${{ env.AR_aarch64_linux_android }}
+          # ── Gradle memory limits — prevents silent OOM hang on CI ──────────
+          GRADLE_OPTS: "-Xmx2g -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8 -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.configureondemand=false"
+          JAVA_TOOL_OPTIONS: "-Xmx2g"
+
 
       # ── 12. Find and upload APK ──────────────────────────────────────────────
       - name: Find APK file
