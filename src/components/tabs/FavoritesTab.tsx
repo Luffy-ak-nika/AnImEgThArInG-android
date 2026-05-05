@@ -101,111 +101,71 @@ function ProgressSheet({ fav, onClose }: ProgressSheetProps) {
         onClick={onClose}
       />
 
-      {/* Bottom Sheet */}
+      {/* Bottom Sheet — flex column so Save button is always pinned at bottom */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-[9001] rounded-t-3xl overflow-hidden"
         style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9001,
+          borderRadius: "24px 24px 0 0",
           background: "var(--color-bg-secondary)",
           borderTop: "1px solid rgba(148,163,184,0.12)",
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
-          maxHeight: "85dvh",
-          overflowY: "auto",
+          maxHeight: "90dvh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",            /* clip rounded corners only */
         }}
       >
         {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div
-            style={{
-              width: 40,
-              height: 4,
-              borderRadius: 2,
-              background: "rgba(148,163,184,0.3)",
-            }}
-          />
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 6, flexShrink: 0 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(148,163,184,0.3)" }} />
         </div>
 
-        <div className="px-5 pb-6">
-          {/* Title */}
-          <div className="flex items-start gap-3 mb-5">
+        {/* ── Scrollable content body ── */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "0 20px",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          {/* Title row */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
             {fav.thumbnail ? (
               <img
                 src={fav.thumbnail}
                 alt=""
-                style={{
-                  width: 52,
-                  height: 72,
-                  objectFit: "cover",
-                  borderRadius: 10,
-                  flexShrink: 0,
-                }}
+                style={{ width: 52, height: 72, objectFit: "cover", borderRadius: 10, flexShrink: 0 }}
               />
             ) : (
               <div
                 style={{
-                  width: 52,
-                  height: 72,
-                  background: "var(--color-bg-hover)",
-                  borderRadius: 10,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 24,
-                  flexShrink: 0,
+                  width: 52, height: 72, background: "var(--color-bg-hover)",
+                  borderRadius: 10, display: "flex", alignItems: "center",
+                  justifyContent: "center", fontSize: 24, flexShrink: 0,
                 }}
-              >
-                🎬
-              </div>
+              >🎬</div>
             )}
-            <div className="min-w-0">
-              <h3
-                style={{
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: "var(--color-text-primary)",
-                  lineHeight: 1.3,
-                  marginBottom: 4,
-                }}
-              >
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ fontWeight: 700, fontSize: 15, color: "var(--color-text-primary)", lineHeight: 1.3, marginBottom: 4 }}>
                 {fav.title}
               </h3>
               {fav.site_name && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "var(--color-text-muted)",
-                    background: "var(--color-bg-hover)",
-                    borderRadius: 6,
-                    padding: "2px 8px",
-                  }}
-                >
+                <span style={{ fontSize: 11, color: "var(--color-text-muted)", background: "var(--color-bg-hover)", borderRadius: 6, padding: "2px 8px" }}>
                   {fav.site_name}
                 </span>
               )}
             </div>
           </div>
 
-          {/* Status selector */}
-          <label
-            style={{
-              fontSize: 11,
-              fontWeight: 600,
-              color: "var(--color-text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              display: "block",
-              marginBottom: 8,
-            }}
-          >
+          {/* Watch Status */}
+          <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
             Watch Status
-          </label>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              marginBottom: 18,
-            }}
-          >
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
             {ALL_STATUSES.map(([val, c]) => {
               const active = status === val;
               return (
@@ -213,7 +173,7 @@ function ProgressSheet({ fav, onClose }: ProgressSheetProps) {
                   key={val}
                   onClick={() => setStatus(val)}
                   style={{
-                    padding: "7px 14px",
+                    padding: "8px 14px",
                     borderRadius: 20,
                     border: `1.5px solid ${active ? c.color : "rgba(148,163,184,0.15)"}`,
                     background: active ? c.bg : "transparent",
@@ -221,7 +181,6 @@ function ProgressSheet({ fav, onClose }: ProgressSheetProps) {
                     fontSize: 12,
                     fontWeight: active ? 600 : 400,
                     cursor: "pointer",
-                    transition: "all 0.15s",
                     WebkitTapHighlightColor: "transparent",
                   }}
                 >
@@ -232,175 +191,82 @@ function ProgressSheet({ fav, onClose }: ProgressSheetProps) {
           </div>
 
           {/* Episode progress */}
-          <div
-            style={{ display: "flex", gap: 12, marginBottom: 16 }}
-          >
+          <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <div style={{ flex: 1 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "var(--color-text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  display: "block",
-                  marginBottom: 6,
-                }}
-              >
+              <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
                 Watched
-              </label>
+              </p>
               <input
-                type="number"
-                min="0"
-                value={watched}
-                onChange={(e) => {
-                  setWatched(e.target.value);
-                  if (parseInt(e.target.value) > 0 && !total) setTotal("");
-                }}
-                inputMode="numeric"
-                placeholder="0"
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1.5px solid rgba(148,163,184,0.15)",
-                  background: "var(--color-bg-hover)",
-                  color: "var(--color-text-primary)",
-                  fontSize: 16,
-                  outline: "none",
-                }}
+                type="number" min="0" value={watched}
+                onChange={(e) => setWatched(e.target.value)}
+                inputMode="numeric" placeholder="0"
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(148,163,184,0.15)", background: "var(--color-bg-hover)", color: "var(--color-text-primary)", fontSize: 16, outline: "none" }}
               />
             </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                paddingBottom: 10,
-                color: "var(--color-text-muted)",
-                fontSize: 18,
-                fontWeight: 300,
-              }}
-            >
-              /
-            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 10, color: "var(--color-text-muted)", fontSize: 18 }}>/</div>
             <div style={{ flex: 1 }}>
-              <label
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "var(--color-text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  display: "block",
-                  marginBottom: 6,
-                }}
-              >
+              <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
                 Total
-              </label>
+              </p>
               <input
-                type="number"
-                min="0"
-                value={total}
+                type="number" min="0" value={total}
                 onChange={(e) => setTotal(e.target.value)}
-                inputMode="numeric"
-                placeholder="?"
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1.5px solid rgba(148,163,184,0.15)",
-                  background: "var(--color-bg-hover)",
-                  color: "var(--color-text-primary)",
-                  fontSize: 16,
-                  outline: "none",
-                }}
+                inputMode="numeric" placeholder="?"
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(148,163,184,0.15)", background: "var(--color-bg-hover)", color: "var(--color-text-primary)", fontSize: 16, outline: "none" }}
               />
             </div>
           </div>
 
-          {/* Last episode / chapter label */}
-          <div style={{ marginBottom: 16 }}>
-            <label
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "var(--color-text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                display: "block",
-                marginBottom: 6,
-              }}
-            >
+          {/* Last episode */}
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
               Last Watched (e.g. "Episode 12")
-            </label>
+            </p>
             <input
-              type="text"
-              value={lastEp}
+              type="text" value={lastEp}
               onChange={(e) => setLastEp(e.target.value)}
               placeholder="Episode 1"
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1.5px solid rgba(148,163,184,0.15)",
-                background: "var(--color-bg-hover)",
-                color: "var(--color-text-primary)",
-                fontSize: 14,
-                outline: "none",
-              }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(148,163,184,0.15)", background: "var(--color-bg-hover)", color: "var(--color-text-primary)", fontSize: 14, outline: "none" }}
             />
           </div>
 
           {/* Notes */}
-          <div style={{ marginBottom: 20 }}>
-            <label
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "var(--color-text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                display: "block",
-                marginBottom: 6,
-              }}
-            >
+          <div style={{ marginBottom: 8 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
               Notes (optional)
-            </label>
+            </p>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes, e.g. currently on season 2..."
+              placeholder="e.g. currently on season 2..."
               rows={2}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1.5px solid rgba(148,163,184,0.15)",
-                background: "var(--color-bg-hover)",
-                color: "var(--color-text-primary)",
-                fontSize: 14,
-                outline: "none",
-                resize: "none",
-                fontFamily: "inherit",
-              }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(148,163,184,0.15)", background: "var(--color-bg-hover)", color: "var(--color-text-primary)", fontSize: 14, outline: "none", resize: "none", fontFamily: "inherit" }}
             />
           </div>
+        </div>
 
-          {/* Save button */}
+        {/* ── STICKY Save button footer — ALWAYS visible, never scrolls away ── */}
+        <div
+          style={{
+            flexShrink: 0,
+            padding: "12px 20px",
+            paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
+            borderTop: "1px solid rgba(148,163,184,0.08)",
+            background: "var(--color-bg-secondary)",
+          }}
+        >
           <button
             onClick={handleSave}
             disabled={saving}
             style={{
               width: "100%",
-              padding: "14px",
+              padding: "16px",
               borderRadius: 14,
               border: "none",
-              background: saving
-                ? "rgba(168,85,247,0.4)"
-                : "linear-gradient(135deg, #a855f7, #6366f1)",
+              background: saving ? "rgba(168,85,247,0.4)" : "linear-gradient(135deg, #a855f7, #6366f1)",
               color: "white",
               fontWeight: 700,
-              fontSize: 15,
+              fontSize: 16,
               cursor: saving ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
@@ -410,18 +276,9 @@ function ProgressSheet({ fav, onClose }: ProgressSheetProps) {
             }}
           >
             {saving ? (
-              <div
-                style={{
-                  width: 18,
-                  height: 18,
-                  border: "2px solid white",
-                  borderTopColor: "transparent",
-                  borderRadius: "50%",
-                  animation: "spin 0.7s linear infinite",
-                }}
-              />
+              <div style={{ width: 18, height: 18, border: "2px solid white", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
             ) : (
-              <Save size={16} />
+              <Save size={18} />
             )}
             {saving ? "Saving..." : "Save Progress"}
           </button>
@@ -810,40 +667,39 @@ export default function FavoritesTab() {
                       onClick={() => setEditingFav(fav)}
                       style={{
                         flex: 1,
-                        padding: "6px 0",
-                        borderRadius: 8,
-                        border: "1px solid rgba(148,163,184,0.15)",
-                        background: "transparent",
-                        color: "var(--color-text-muted)",
-                        fontSize: 11,
-                        fontWeight: 500,
+                        padding: "12px 0",
+                        borderRadius: 10,
+                        border: "1px solid rgba(148,163,184,0.2)",
+                        background: "rgba(148,163,184,0.06)",
+                        color: "var(--color-text-secondary)",
+                        fontSize: 12,
+                        fontWeight: 600,
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        gap: 4,
+                        gap: 5,
                         WebkitTapHighlightColor: "transparent",
                       }}
                     >
-                      <ChevronDown size={11} />
-                      Update
+                      ✏️ Progress
                     </button>
                     <button
                       onClick={() => removeFromFavorites(fav.id)}
                       style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid rgba(239,68,68,0.2)",
-                        background: "transparent",
-                        color: "#ef4444",
-                        fontSize: 11,
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(239,68,68,0.25)",
+                        background: "rgba(239,68,68,0.06)",
+                        color: "#f87171",
+                        fontSize: 14,
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
                         WebkitTapHighlightColor: "transparent",
                       }}
                     >
-                      <Trash2 size={11} />
+                      🗑️
                     </button>
                   </div>
                 </div>
