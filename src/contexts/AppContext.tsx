@@ -10,11 +10,14 @@ import {
   type DbSite,
   type DbDomain,
   type DbFavorite,
+  type WatchStatus,
   addFavorite as dbAddFavorite,
   removeFavorite as dbRemoveFavorite,
   updateSiteDomains as dbUpdateDomains,
   setActiveDomain as dbSetActiveDomain,
   deleteSite as dbDeleteSite,
+  upsertFavorite as dbUpsertFavorite,
+  updateFavoriteProgress as dbUpdateFavoriteProgress,
 } from "@/lib/db";
 import { DEFAULT_SITES } from "@/lib/sites";
 import {
@@ -63,6 +66,22 @@ interface AppContextValue {
     siteName: string,
     lastEpisode: string,
     pageUrl: string
+  ) => Promise<void>;
+  upsertToFavorites: (
+    title: string,
+    thumbnail: string,
+    siteId: number | null,
+    siteName: string,
+    lastEpisode: string,
+    pageUrl: string
+  ) => Promise<void>;
+  updateFavoriteProgress: (
+    id: number,
+    watchedEpisodes: number,
+    totalEpisodes: number,
+    status: WatchStatus,
+    lastEpisode: string,
+    notes: string
   ) => Promise<void>;
   removeFromFavorites: (id: number) => Promise<void>;
 
@@ -249,6 +268,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [refreshFavorites]
   );
 
+  const upsertToFavorites = useCallback(
+    async (
+      title: string,
+      thumbnail: string,
+      siteId: number | null,
+      siteName: string,
+      lastEpisode: string,
+      pageUrl: string
+    ) => {
+      try {
+        await dbUpsertFavorite(title, thumbnail, siteId, siteName, lastEpisode, pageUrl);
+        await refreshFavorites();
+      } catch (err) {
+        console.error("Failed to upsert favorite:", err);
+      }
+    },
+    [refreshFavorites]
+  );
+
+  const updateFavoriteProgress = useCallback(
+    async (
+      id: number,
+      watchedEpisodes: number,
+      totalEpisodes: number,
+      status: WatchStatus,
+      lastEpisode: string,
+      notes: string
+    ) => {
+      try {
+        await dbUpdateFavoriteProgress(id, watchedEpisodes, totalEpisodes, status, lastEpisode, notes);
+        await refreshFavorites();
+      } catch (err) {
+        console.error("Failed to update progress:", err);
+      }
+    },
+    [refreshFavorites]
+  );
+
   const removeFromFavorites = useCallback(
     async (id: number) => {
       await dbRemoveFavorite(id);
@@ -407,6 +464,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         favorites,
         refreshFavorites,
         addToFavorites,
+        upsertToFavorites,
+        updateFavoriteProgress,
         removeFromFavorites,
         openWebviews,
         openSiteWebview,

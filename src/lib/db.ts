@@ -43,10 +43,25 @@ export async function initDatabase(): Promise<void> {
       site_id INTEGER,
       site_name TEXT DEFAULT '',
       last_episode TEXT DEFAULT '',
+      watched_episodes INTEGER DEFAULT 0,
+      total_episodes INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'watching',
+      notes TEXT DEFAULT '',
       page_url TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // ── Migrations for existing databases (safe to run multiple times) ──────
+  await database.execute(`ALTER TABLE favorites ADD COLUMN watched_episodes INTEGER DEFAULT 0`).catch(() => {});
+  await database.execute(`ALTER TABLE favorites ADD COLUMN total_episodes INTEGER DEFAULT 0`).catch(() => {});
+  await database.execute(`ALTER TABLE favorites ADD COLUMN status TEXT DEFAULT 'watching'`).catch(() => {});
+  await database.execute(`ALTER TABLE favorites ADD COLUMN notes TEXT DEFAULT ''`).catch(() => {});
+
+  // Unique index on page_url enables upsert (ON CONFLICT) for backup restore
+  await database.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_favorites_page_url ON favorites(page_url)`
+  ).catch(() => {});
 }
 
 // ===== Sites =====
@@ -66,6 +81,13 @@ export interface DbDomain {
   position: number;
 }
 
+export type WatchStatus =
+  | "watching"
+  | "completed"
+  | "on-hold"
+  | "dropped"
+  | "plan-to-watch";
+
 export interface DbFavorite {
   id: number;
   title: string;
@@ -73,6 +95,10 @@ export interface DbFavorite {
   site_id: number | null;
   site_name: string;
   last_episode: string;
+  watched_episodes: number;
+  total_episodes: number;
+  status: WatchStatus;
+  notes: string;
   page_url: string;
   created_at: string;
 }
@@ -188,6 +214,75 @@ export async function addFavorite(
   return result.lastInsertId ?? 0;
 }
 
+/**
+ * Upsert a favorite — if an entry with the same page_url already exists,
+ * UPDATE it (replacing data) instead of creating a duplicate.
+ * Falls back to title match if page_url is empty/generic.
+ */
+export async function upsertFavorite(
+  title: string,
+  thumbnail: string,
+  siteId: number | null,
+  siteName: string,
+  lastEpisode: string,
+  pageUrl: string,
+  watchedEpisodes = 0,
+  totalEpisodes = 0,
+  status: WatchStatus = "watching",
+  notes = ""
+): Promise<number> {
+  const database = await getDb();
+
+  // Check for existing entry by page_url first, then by title
+  const existing: { id: number }[] = await database.select(
+    `SELECT id FROM favorites WHERE page_url = ? OR (page_url = '' AND title = ?) LIMIT 1`,
+    [pageUrl, title]
+  );
+
+  if (existing.length > 0) {
+    const id = existing[0].id;
+    await database.execute(
+      `UPDATE favorites SET
+        title = ?,
+        thumbnail = CASE WHEN ? != '' THEN ? ELSE thumbnail END,
+        site_id = CASE WHEN ? IS NOT NULL THEN ? ELSE site_id END,
+        site_name = CASE WHEN ? != '' THEN ? ELSE site_name END,
+        last_episode = CASE WHEN ? != '' THEN ? ELSE last_episode END,
+        watched_episodes = CASE WHEN ? > 0 THEN ? ELSE watched_episodes END,
+        total_episodes = CASE WHEN ? > 0 THEN ? ELSE total_episodes END,
+        status = CASE WHEN ? != 'watching' THEN ? ELSE status END,
+        notes = CASE WHEN ? != '' THEN ? ELSE notes END,
+        page_url = CASE WHEN ? != '' THEN ? ELSE page_url END
+       WHERE id = ?`,
+      [
+        title,
+        thumbnail, thumbnail,
+        siteId, siteId,
+        siteName, siteName,
+        lastEpisode, lastEpisode,
+        watchedEpisodes, watchedEpisodes,
+        totalEpisodes, totalEpisodes,
+        status, status,
+        notes, notes,
+        pageUrl, pageUrl,
+        id,
+      ]
+    );
+    return id;
+  }
+
+  // Not found — insert new
+  const result = await database.execute(
+    `INSERT INTO favorites
+      (title, thumbnail, site_id, site_name, last_episode, page_url,
+       watched_episodes, total_episodes, status, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [title, thumbnail, siteId, siteName, lastEpisode, pageUrl,
+     watchedEpisodes, totalEpisodes, status, notes]
+  );
+  return result.lastInsertId ?? 0;
+}
+
 export async function updateFavorite(
   id: number,
   lastEpisode: string,
@@ -197,6 +292,28 @@ export async function updateFavorite(
   await database.execute(
     "UPDATE favorites SET last_episode = ?, page_url = ? WHERE id = ?",
     [lastEpisode, pageUrl, id]
+  );
+}
+
+/** Update watch progress fields only */
+export async function updateFavoriteProgress(
+  id: number,
+  watchedEpisodes: number,
+  totalEpisodes: number,
+  status: WatchStatus,
+  lastEpisode: string,
+  notes: string
+): Promise<void> {
+  const database = await getDb();
+  await database.execute(
+    `UPDATE favorites SET
+       watched_episodes = ?,
+       total_episodes = ?,
+       status = ?,
+       last_episode = ?,
+       notes = ?
+     WHERE id = ?`,
+    [watchedEpisodes, totalEpisodes, status, lastEpisode, notes, id]
   );
 }
 

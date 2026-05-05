@@ -21,15 +21,16 @@ export default function MobileTopBar({ openCount, onOpenDrawer }: Props) {
           left: 0,
           right: 0,
           zIndex: 90,
-          height: "56px",
+          height: "calc(56px + env(safe-area-inset-top, 0px))",
           background: "rgba(12,12,20,0.97)",
           backdropFilter: "blur(20px) saturate(200%)",
           WebkitBackdropFilter: "blur(20px) saturate(200%)",
           borderBottom: "1px solid rgba(255,255,255,0.07)",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-end",   /* content sits at bottom of bar, above safe area */
           paddingLeft: "16px",
           paddingRight: "12px",
+          paddingBottom: "8px",
           gap: "10px",
           paddingTop: "env(safe-area-inset-top, 0px)",
         }}

@@ -57,8 +57,8 @@ function AppContent() {
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          paddingTop: "56px",  /* height of mobile top bar */
-          paddingBottom: "70px", /* height of mobile tab bar */
+          paddingTop: "calc(56px + env(safe-area-inset-top, 0px))",
+          paddingBottom: "calc(70px + env(safe-area-inset-bottom, 0px))",
         }}
       >
         {activeTab === "favorites" && <FavoritesTab />}

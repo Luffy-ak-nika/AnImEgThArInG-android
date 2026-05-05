@@ -3,219 +3,447 @@ import {
   Plus,
   Edit3,
   Trash2,
-  ChevronDown,
   RefreshCw,
+  X,
+  Check,
 } from "lucide-react";
 import { useApp, type SiteWithDomains } from "@/contexts/AppContext";
 import { useState } from "react";
 import AddSiteDialog from "@/components/dialogs/AddSiteDialog";
 import EditDomainsDialog from "@/components/dialogs/EditDomainsDialog";
 
+// ── Domain switcher bottom sheet ─────────────────────────────────────────────
+interface DomainSheetProps {
+  site: SiteWithDomains;
+  onSelect: (url: string) => void;
+  onClose: () => void;
+}
+
+function DomainSheet({ site, onSelect, onClose }: DomainSheetProps) {
+  return (
+    <>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9000,
+          background: "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(4px)",
+        }}
+        onClick={onClose}
+      />
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9001,
+          background: "var(--color-bg-secondary)",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: "20px 20px 0 0",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
+        {/* Handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(148,163,184,0.25)" }} />
+        </div>
+
+        <div style={{ padding: "0 16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)" }}>
+              {site.icon || "🌐"} {site.name} — Mirror Domains
+            </h3>
+            <button
+              onClick={onClose}
+              style={{
+                width: 32, height: 32, borderRadius: 8, border: "none",
+                background: "var(--color-bg-hover)", color: "var(--color-text-muted)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {site.domains.map((d) => {
+            const active = d.is_active === 1 || d.url === site.activeDomain;
+            return (
+              <button
+                key={d.id}
+                onClick={() => { onSelect(d.url); onClose(); }}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "14px 16px",
+                  marginBottom: 6,
+                  borderRadius: 12,
+                  border: `1.5px solid ${active ? "rgba(168,85,247,0.4)" : "rgba(148,163,184,0.1)"}`,
+                  background: active ? "rgba(168,85,247,0.1)" : "var(--color-bg-hover)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  WebkitTapHighlightColor: "transparent",
+                }}
+              >
+                <span
+                  style={{
+                    width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+                    background: active ? "#a855f7" : "rgba(148,163,184,0.3)",
+                    boxShadow: active ? "0 0 6px #a855f7" : "none",
+                  }}
+                />
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: 13,
+                    color: active ? "#a855f7" : "var(--color-text-secondary)",
+                    fontWeight: active ? 600 : 400,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {d.url.replace(/^https?:\/\//, "")}
+                </span>
+                {active && <Check size={15} color="#a855f7" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Delete confirmation inline ────────────────────────────────────────────────
+interface DeleteConfirmProps {
+  name: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function DeleteConfirm({ name, onConfirm, onCancel }: DeleteConfirmProps) {
+  return (
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.55)" }}
+        onClick={onCancel}
+      />
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9001,
+          background: "var(--color-bg-secondary)",
+          borderRadius: "20px 20px 0 0",
+          padding: "24px 20px",
+          paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🗑️</div>
+        <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)", marginBottom: 6 }}>
+          Delete "{name}"?
+        </h3>
+        <p style={{ fontSize: 13, color: "var(--color-text-muted)", marginBottom: 20 }}>
+          This will remove the site and all its saved mirrors.
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1, padding: "14px", borderRadius: 12, border: "1.5px solid rgba(148,163,184,0.2)",
+              background: "transparent", color: "var(--color-text-secondary)", fontSize: 14,
+              fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1, padding: "14px", borderRadius: 12, border: "none",
+              background: "rgba(239,68,68,0.15)", color: "#f87171", fontSize: 14,
+              fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Main tab ─────────────────────────────────────────────────────────────────
 export default function WebsitesTab() {
-  const {
-    sites,
-    openSiteWebview,
-    switchActiveDomain,
-    removeCustomSite,
-  } = useApp();
+  const { sites, openSiteWebview, switchActiveDomain, removeCustomSite } = useApp();
 
   const [showAddSite, setShowAddSite] = useState(false);
   const [editingSite, setEditingSite] = useState<SiteWithDomains | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
-
-  const handleDomainSwitch = async (siteId: number, url: string) => {
-    setOpenDropdown(null);
-    await switchActiveDomain(siteId, url);
-  };
+  const [domainSheetSite, setDomainSheetSite] = useState<SiteWithDomains | null>(null);
+  const [deletingSite, setDeletingSite] = useState<SiteWithDomains | null>(null);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div style={{ padding: "16px 12px", paddingBottom: 20 }}>
       {/* Header */}
-      <div className="mb-6 animate-fade-in-up">
-        <h1 className="text-2xl font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-          <Globe size={24} className="text-[var(--color-accent-secondary)]" />
-          Streaming Websites
+      <div style={{ marginBottom: 16 }}>
+        <h1
+          style={{
+            fontSize: 22,
+            fontWeight: 800,
+            color: "var(--color-text-primary)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 4,
+          }}
+        >
+          <Globe size={22} color="var(--color-accent-secondary)" />
+          Streaming Sites
         </h1>
-        <p className="text-sm text-[var(--color-text-muted)] mt-1">
-          {sites.length} sites · Click to open in webview · Edit domains per site
+        <p style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+          {sites.length} sites · Tap to open · Long-press to switch mirror
         </p>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 stagger-grid">
+      {/* Grid — 2 cols on phone, 3 on tablet */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: 10,
+        }}
+      >
         {sites.map((site) => (
           <div
             key={site.id}
-            className="glass-card group overflow-visible"
             style={{
-              position: "relative",
-              zIndex: openDropdown === site.id ? 30 : 1,
-              transform: "none",
+              background: "var(--color-bg-glass)",
+              border: "1px solid var(--color-border-default)",
+              borderRadius: 16,
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            {/* Click to open */}
+            {/* Tappable main area */}
             <div
-              className="p-5 cursor-pointer transition-opacity hover:opacity-90"
+              style={{ padding: "16px 12px 10px", cursor: "pointer", flex: 1 }}
               onClick={() => openSiteWebview(site)}
             >
-              {/* Icon & Name */}
-              <div className="text-center mb-3">
-                <div className="text-3xl mb-2 transition-transform duration-300 group-hover:scale-110">
-                  {site.icon || "🌐"}
-                </div>
-                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
-                  {site.name}
-                </h3>
+              {/* Big emoji icon */}
+              <div style={{ fontSize: 40, textAlign: "center", marginBottom: 8, lineHeight: 1 }}>
+                {site.icon || "🌐"}
               </div>
 
-              {/* Active Domain */}
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <div className="status-dot online" />
-                <span className="text-xs text-[var(--color-text-muted)] truncate max-w-[140px]">
+              {/* Site name */}
+              <h3
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--color-text-primary)",
+                  textAlign: "center",
+                  marginBottom: 6,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {site.name}
+              </h3>
+
+              {/* Active domain */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 5,
+                }}
+              >
+                <span className="status-dot online" style={{ flexShrink: 0 }} />
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: "var(--color-text-muted)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    maxWidth: "90%",
+                  }}
+                >
                   {site.activeDomain.replace(/^https?:\/\//, "")}
                 </span>
               </div>
 
               {/* Custom badge */}
               {site.is_custom === 1 && (
-                <div className="flex justify-center mt-2">
-                  <span className="text-[10px] bg-[var(--color-accent-primary)]/20 text-[var(--color-accent-primary)]
-                    px-2 py-0.5 rounded-full font-medium">
+                <div style={{ textAlign: "center", marginTop: 6 }}>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      background: "rgba(168,85,247,0.15)",
+                      color: "#a855f7",
+                      padding: "2px 8px",
+                      borderRadius: 20,
+                      fontWeight: 600,
+                    }}
+                  >
                     Custom
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Bottom Actions */}
-            <div className="flex border-t border-[var(--color-border-default)]">
-              {/* Domain Switcher */}
-              <div className="relative flex-1">
+            {/* Action row */}
+            <div
+              style={{
+                display: "flex",
+                borderTop: "1px solid var(--color-border-default)",
+              }}
+            >
+              {/* Switch mirror */}
+              {site.domains.length > 1 && (
                 <button
-                  className="w-full flex items-center justify-center gap-1 p-2 text-xs
-                    text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]
-                    hover:bg-[var(--color-bg-hover)] transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenDropdown(openDropdown === site.id ? null : site.id);
+                  onClick={(e) => { e.stopPropagation(); setDomainSheetSite(site); }}
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 5,
+                    padding: "10px 6px",
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--color-text-muted)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    WebkitTapHighlightColor: "transparent",
                   }}
                 >
-                  <RefreshCw size={11} />
-                  Switch
-                  <ChevronDown size={11} />
+                  <RefreshCw size={13} />
+                  Mirror
                 </button>
+              )}
 
-                {/* Domain Dropdown - rendered as fixed position to escape stacking context */}
-                {openDropdown === site.id && (
-                  <div
-                    className="absolute bottom-full left-0 right-0 mb-1 bg-[var(--color-bg-secondary)]
-                      border border-[var(--color-border-default)] rounded-lg shadow-2xl
-                      animate-fade-in overflow-hidden"
-                    style={{ zIndex: 9999 }}
-                  >
-                    <div className="py-1">
-                      <p className="px-3 py-1.5 text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider font-medium">
-                        Mirror Domains
-                      </p>
-                      {site.domains.map((domain) => (
-                        <button
-                          key={domain.id}
-                          className={`w-full text-left px-3 py-2.5 text-xs transition-colors flex items-center gap-2
-                            ${
-                              domain.is_active
-                                ? "bg-[var(--color-accent-primary)]/10 text-[var(--color-accent-primary)] font-medium"
-                                : "text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
-                            }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleDomainSwitch(site.id, domain.url);
-                          }}
-                        >
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${
-                              domain.is_active
-                                ? "bg-[var(--color-accent-primary)]"
-                                : "bg-[var(--color-text-muted)]/30"
-                            }`}
-                          />
-                          {domain.url.replace(/^https?:\/\//, "")}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Edit Domains */}
+              {/* Edit domains */}
               <button
-                className="p-2 text-xs text-[var(--color-text-muted)]
-                  hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]
-                  transition-colors border-l border-[var(--color-border-default)]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingSite(site);
+                onClick={(e) => { e.stopPropagation(); setEditingSite(site); }}
+                style={{
+                  flex: site.domains.length > 1 ? 0 : 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 5,
+                  padding: "10px 12px",
+                  border: "none",
+                  borderLeft: site.domains.length > 1 ? "1px solid var(--color-border-default)" : "none",
+                  background: "transparent",
+                  color: "var(--color-text-muted)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  WebkitTapHighlightColor: "transparent",
                 }}
-                title="Edit domains"
               >
                 <Edit3 size={13} />
+                {site.domains.length <= 1 ? "Edit" : ""}
               </button>
 
               {/* Delete (custom only) */}
               {site.is_custom === 1 && (
                 <button
-                  className="p-2 text-xs text-[var(--color-text-muted)]
-                    hover:text-red-400 hover:bg-red-500/10
-                    transition-colors border-l border-[var(--color-border-default)]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm(`Delete "${site.name}"?`)) {
-                      removeCustomSite(site.id);
-                    }
+                  onClick={(e) => { e.stopPropagation(); setDeletingSite(site); }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "10px 12px",
+                    border: "none",
+                    borderLeft: "1px solid var(--color-border-default)",
+                    background: "transparent",
+                    color: "#f87171",
+                    cursor: "pointer",
+                    WebkitTapHighlightColor: "transparent",
                   }}
-                  title="Delete site"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={14} />
                 </button>
               )}
             </div>
           </div>
         ))}
 
-        {/* Add Custom Website Card */}
+        {/* Add Custom Site card */}
         <div
-          className="glass-card cursor-pointer flex flex-col items-center justify-center p-6 min-h-[180px]
-            border-dashed! hover:border-[var(--color-accent-primary)]"
           onClick={() => setShowAddSite(true)}
+          style={{
+            background: "transparent",
+            border: "1.5px dashed rgba(168,85,247,0.25)",
+            borderRadius: 16,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px 12px",
+            minHeight: 160,
+            cursor: "pointer",
+            gap: 8,
+            WebkitTapHighlightColor: "transparent",
+          }}
         >
-          <Plus
-            size={28}
-            className="text-[var(--color-text-muted)] mb-2 transition-colors"
-          />
-          <span className="text-sm font-medium text-[var(--color-text-secondary)]">
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              background: "rgba(168,85,247,0.1)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Plus size={22} color="var(--color-text-muted)" />
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-secondary)" }}>
             Add Custom Site
           </span>
-          <span className="text-xs text-[var(--color-text-muted)] mt-1">
+          <span style={{ fontSize: 11, color: "var(--color-text-muted)", textAlign: "center" }}>
             Any streaming website
           </span>
         </div>
       </div>
 
-      {/* Click outside to close dropdown */}
-      {openDropdown !== null && (
-        <div
-          className="fixed inset-0"
-          style={{ zIndex: 5 }}
-          onClick={() => setOpenDropdown(null)}
+      {/* Domain bottom sheet */}
+      {domainSheetSite && (
+        <DomainSheet
+          site={domainSheetSite}
+          onSelect={(url) => switchActiveDomain(domainSheetSite.id, url)}
+          onClose={() => setDomainSheetSite(null)}
+        />
+      )}
+
+      {/* Delete confirmation */}
+      {deletingSite && (
+        <DeleteConfirm
+          name={deletingSite.name}
+          onConfirm={() => {
+            removeCustomSite(deletingSite.id);
+            setDeletingSite(null);
+          }}
+          onCancel={() => setDeletingSite(null)}
         />
       )}
 
       {showAddSite && <AddSiteDialog onClose={() => setShowAddSite(false)} />}
       {editingSite && (
-        <EditDomainsDialog
-          site={editingSite}
-          onClose={() => setEditingSite(null)}
-        />
+        <EditDomainsDialog site={editingSite} onClose={() => setEditingSite(null)} />
       )}
     </div>
   );

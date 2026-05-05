@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Patch Tauri's generated MainActivity.kt to handle Android back button correctly.
-The patched code finds the WebView recursively and calls goBack() when history exists,
-only falling back to super.onBackPressed() (exit) when there's nothing to go back to.
+"""Patch Tauri's generated MainActivity.kt to handle Android back button correctly
+and to hide the system bars (status bar + nav bar) in landscape mode for fullscreen
+video playback.
+
+Uses:
+  - Recursive WebView finder for reliable back-button navigation
+  - WindowInsetsControllerCompat (AndroidX) for modern immersive fullscreen
+  - onConfigurationChanged to react to orientation changes
 """
 import sys
 
@@ -9,12 +14,57 @@ path = sys.argv[1]
 with open(path) as f:
     content = f.read()
 
-if 'onBackPressed' in content:
+if 'onBackPressed' in content and 'onConfigurationChanged' in content:
     print('Already patched — skipping')
     sys.exit(0)
 
+# ── Imports to add at top of file ────────────────────────────────────────────
+# Find the package declaration line and insert imports after it
+import_block = (
+    'import androidx.core.view.WindowCompat\n'
+    'import androidx.core.view.WindowInsetsCompat\n'
+    'import androidx.core.view.WindowInsetsControllerCompat\n'
+)
+
+if 'WindowCompat' not in content:
+    # Insert imports before the "class MainActivity" line
+    content = content.replace(
+        'class MainActivity : TauriActivity() {',
+        import_block + '\nclass MainActivity : TauriActivity() {',
+        1
+    )
+
+# ── Patch to inject inside the class ─────────────────────────────────────────
 patch = '''
-    // Recursively search the view hierarchy for the Tauri WebView
+    // ── System-bar helpers ────────────────────────────────────────────────
+    private fun getInsetsController(): WindowInsetsControllerCompat =
+        WindowCompat.getInsetsController(window, window.decorView)
+
+    private fun hideSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val ctrl = getInsetsController()
+        ctrl.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        ctrl.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    private fun showSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val ctrl = getInsetsController()
+        ctrl.show(WindowInsetsCompat.Type.systemBars())
+    }
+
+    // ── Orientation: fullscreen in landscape (video mode) ─────────────────
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            hideSystemBars()
+        } else {
+            showSystemBars()
+        }
+    }
+
+    // ── Recursively find the Tauri WebView in view hierarchy ─────────────
     private fun findWebView(v: android.view.View): android.webkit.WebView? {
         if (v is android.webkit.WebView) return v
         val g = v as? android.view.ViewGroup ?: return null
@@ -25,7 +75,7 @@ patch = '''
         return null
     }
 
-    // Android back gesture: navigate WebView history OR exit if at root
+    // ── Back button: navigate WebView history, exit only when at root ─────
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         val wv = findWebView(window.decorView)
@@ -42,5 +92,6 @@ content = content.replace(
     'class MainActivity : TauriActivity() {' + patch,
     1
 )
+
 open(path, 'w').write(content)
-print('Patched MainActivity.kt: back button navigates WebView history')
+print('Patched MainActivity.kt: back button + landscape fullscreen')

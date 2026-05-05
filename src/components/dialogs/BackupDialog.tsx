@@ -28,7 +28,7 @@ interface Props {
 type ActiveTab = "import" | "export";
 
 export default function BackupDialog({ onClose }: Props) {
-  const { addToFavorites, refreshFavorites, favorites, sites } = useApp();
+  const { upsertToFavorites, refreshFavorites, favorites, sites } = useApp();
   const [activeTab, setActiveTab] = useState<ActiveTab>("import");
 
   // ─── Import state ───
@@ -83,9 +83,11 @@ export default function BackupDialog({ onClose }: Props) {
       setImportMessage(`Found ${entries.length} entries. Importing...`);
 
       let imported = 0;
+      let replaced = 0;
       for (const entry of entries) {
         try {
-          await addToFavorites(
+          const existing = favorites.find(f => f.title === entry.title);
+          await upsertToFavorites(
             entry.title,
             entry.thumbnail,
             0,
@@ -93,15 +95,17 @@ export default function BackupDialog({ onClose }: Props) {
             "",
             entry.url || `Imported: ${entry.title}`
           );
-          imported++;
+          if (existing) replaced++; else imported++;
         } catch {
-          // Skip duplicates or errors
+          // Skip errors
         }
       }
 
-      setImportedCount(imported);
+      setImportedCount(imported + replaced);
       setImportStatus("success");
-      setImportMessage(`Successfully imported ${imported} anime from backup!`);
+      setImportMessage(
+        `Imported ${imported} new · ${replaced} updated from backup!`
+      );
       await refreshFavorites();
     } catch (err) {
       setImportStatus("error");
@@ -115,10 +119,14 @@ export default function BackupDialog({ onClose }: Props) {
       const data = JSON.parse(content);
 
       let imported = 0;
+      let replaced = 0;
       if (data.favorites && Array.isArray(data.favorites)) {
         for (const fav of data.favorites) {
           try {
-            await addToFavorites(
+            const existing = favorites.find(
+              f => f.page_url === fav.page_url || f.title === fav.title
+            );
+            await upsertToFavorites(
               fav.title,
               fav.thumbnail || "",
               fav.site_id || null,
@@ -126,17 +134,17 @@ export default function BackupDialog({ onClose }: Props) {
               fav.last_episode || "",
               fav.page_url || ""
             );
-            imported++;
+            if (existing) replaced++; else imported++;
           } catch {
-            // Skip duplicates
+            // Skip errors
           }
         }
       }
 
-      setImportedCount(imported);
+      setImportedCount(imported + replaced);
       setImportStatus("success");
       setImportMessage(
-        `Restored ${imported} favorites from AnImEgThArInG backup!`
+        `Restored ${imported} new · ${replaced} updated from backup!`
       );
       await refreshFavorites();
     } catch (err) {

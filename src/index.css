@@ -243,10 +243,9 @@ body {
   font-size: 14px;
 }
 
-.btn-primary:hover {
-  opacity: 0.9;
-  box-shadow: 0 4px 20px var(--color-accent-glow);
-  transform: translateY(-1px);
+.btn-primary:active {
+  opacity: 0.85;
+  transform: scale(0.98);
 }
 
 .btn-ghost {
@@ -424,9 +423,9 @@ body {
   box-shadow: 0 4px 20px var(--color-accent-glow);
 }
 
-.fab:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 32px var(--color-accent-glow);
+.fab:active {
+  transform: scale(0.96);
+  opacity: 0.9;
 }
 
 /* ===== Selection ===== */
@@ -450,10 +449,10 @@ html, body, #root {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Touch-friendly minimum hit targets */
-button, [role="button"] {
+/* Touch-friendly tap targets — use padding instead of min-size to avoid breaking layouts */
+/* Only navigation-level buttons get the full 44px target */
+nav button, .fab, .btn-primary, .btn-ghost {
   min-height: 44px;
-  min-width: 44px;
 }
 
 /* Dialogs: bottom sheet on mobile */
@@ -511,7 +510,18 @@ button, [role="button"] {
   * { scrollbar-width: none; }
 }
 
-/* FAB on Android: move above bottom tab bar */
+/* FAB on Android: move above bottom tab bar + safe area */
 @media (max-width: 768px) {
-  .fab { bottom: 78px; }
+  .fab {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    left: 16px;
+    right: 16px;
+    justify-content: center;
+  }
+}
+
+/* Spin animation for loading spinners */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

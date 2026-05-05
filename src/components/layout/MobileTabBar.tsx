@@ -1,10 +1,10 @@
 import { Heart, Globe, Search } from "lucide-react";
 import { useApp, type TabId } from "@/contexts/AppContext";
 
-const tabs: { id: TabId; label: string; icon: React.ReactNode; activeIcon?: React.ReactNode }[] = [
-  { id: "favorites", label: "Favorites", icon: <Heart size={22} /> },
-  { id: "websites",  label: "Browse",    icon: <Globe  size={22} /> },
-  { id: "search",    label: "Search",    icon: <Search size={22} /> },
+const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: "favorites", label: "Library",  icon: <Heart  size={24} /> },
+  { id: "websites",  label: "Browse",   icon: <Globe  size={24} /> },
+  { id: "search",    label: "Search",   icon: <Search size={24} /> },
 ];
 
 export default function MobileTabBar() {
@@ -18,7 +18,7 @@ export default function MobileTabBar() {
         left: 0,
         right: 0,
         zIndex: 100,
-        height: "62px",
+        height: "calc(62px + env(safe-area-inset-bottom, 0px))",
         background: "rgba(14,14,24,0.97)",
         backdropFilter: "blur(20px) saturate(200%)",
         WebkitBackdropFilter: "blur(20px) saturate(200%)",
@@ -59,9 +59,9 @@ export default function MobileTabBar() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: "38px",
-                height: "28px",
-                borderRadius: "10px",
+                width: "48px",
+                height: "34px",
+                borderRadius: "12px",
                 background: isActive
                   ? "rgba(168,85,247,0.15)"
                   : "transparent",
