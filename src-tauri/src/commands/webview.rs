@@ -26,19 +26,36 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
 
     if (document.getElementById('ang-brave-chrome')) return; // already injected
 
-    // ─── Shields: real-time blocked count ───────────────────────────────────
+    let adBlockEnabled = localStorage.getItem('anihub_adblock_enabled') !== 'false';
+    const initHost = location.hostname;
+
+    // ─── Shields: real-time blocked count & Toggle ─────────────────────────
     let blockedCount = 0;
-    function incBlocked() {
-        blockedCount++;
-        const badge = document.getElementById('ang-shields-badge');
-        if (badge) {
-            badge.textContent = blockedCount > 99 ? '99+' : String(blockedCount);
-            badge.classList.add('visible');
-            badge.style.transform = 'scale(1.35)';
-            setTimeout(() => { badge.style.transform = 'scale(1)'; }, 180);
+    function updateShieldUI() {
+        const shBtn = document.getElementById('ang-sh-toggle');
+        if (shBtn) {
+            if (adBlockEnabled) {
+                shBtn.style.background = 'var(--brave-orange-dim)';
+                shBtn.style.color = 'var(--brave-orange)';
+                shBtn.style.border = '1px solid rgba(251,84,43,0.25)';
+                shBtn.innerHTML = `🛡️ ON (${blockedCount > 99 ? '99+' : blockedCount})`;
+                shBtn.title = 'AdBlock is ON (Click to disable)';
+            } else {
+                shBtn.style.background = 'rgba(255,255,255,0.1)';
+                shBtn.style.color = 'var(--brave-muted)';
+                shBtn.style.border = '1px solid transparent';
+                shBtn.innerHTML = `🛡️ OFF`;
+                shBtn.title = 'AdBlock is OFF (Click to enable)';
+            }
         }
         const panelCount = document.getElementById('ang-panel-count');
         if (panelCount) panelCount.textContent = String(blockedCount);
+    }
+
+    function incBlocked() {
+        if (!adBlockEnabled) return;
+        blockedCount++;
+        updateShieldUI();
     }
 
     // ─── Helper: is this URL an ad/spam/redirect destination? ──────────────
@@ -90,7 +107,7 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
     window.open = new Proxy(_origOpen, {
         apply: function(target, thisArg, args) {
             const url = args[0];
-            if (isAdUrl(url)) { incBlocked(); return fakeWindow(url); }
+            if (adBlockEnabled && isAdUrl(url)) { incBlocked(); return fakeWindow(url); }
             return Reflect.apply(target, thisArg, args);
         }
     });
@@ -102,17 +119,18 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         try {
             Object.defineProperty(location, 'assign', {
                 configurable: true,
-                value: function(url) { if (isAdUrl(url)) { incBlocked(); return; } origAssign(url); }
+                value: function(url) { if (adBlockEnabled && isAdUrl(url)) { incBlocked(); return; } origAssign(url); }
             });
             Object.defineProperty(location, 'replace', {
                 configurable: true,
-                value: function(url) { if (isAdUrl(url)) { incBlocked(); return; } origReplace(url); }
+                value: function(url) { if (adBlockEnabled && isAdUrl(url)) { incBlocked(); return; } origReplace(url); }
             });
         } catch(e) {}
     })();
 
     // ─── 3. CSS: hide known ad elements ─────────────────────────────────────
     const adStyle = document.createElement('style');
+    adStyle.id = 'ang-ad-style';
     adStyle.textContent = `
         iframe[src*="popads"], iframe[src*="exoclick"], iframe[src*="adsterra"],
         iframe[src*="doubleclick"], iframe[src*="trafficjunky"], iframe[src*="propellerads"],
@@ -126,12 +144,25 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         img[src*="/new."], img[src*="new-"], img[alt="new"], img[alt="NEW"] {
             display: none !important; pointer-events: none !important; visibility: hidden !important;
         }
-        body { padding-top: calc(52px + env(safe-area-inset-top, 0px)) !important; padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)) !important; }
     `;
-    (document.head || document.documentElement).appendChild(adStyle);
+    // Always keep body padding active so layout doesn't break when toggling
+    const baseStyle = document.createElement('style');
+    baseStyle.textContent = `body { padding-top: calc(52px + env(safe-area-inset-top, 0px)) !important; padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)) !important; }`;
+    (document.head || document.documentElement).appendChild(baseStyle);
+
+    function applyAdStyle() {
+        if (adBlockEnabled) {
+            if (!document.getElementById('ang-ad-style')) (document.head || document.documentElement).appendChild(adStyle);
+        } else {
+            const s = document.getElementById('ang-ad-style');
+            if (s) s.remove();
+        }
+    }
+    applyAdStyle();
 
     // ─── 4. MutationObserver: remove ad overlays ────────────────────────────
     const obs = new MutationObserver(() => {
+        if (!adBlockEnabled) return;
         document.querySelectorAll('a[target="_blank"]').forEach(a => {
             const s = a.style;
             const rect = a.getBoundingClientRect();
@@ -142,6 +173,23 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         });
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
+
+    // ─── Enhanced cross-domain redirect blocking ────────────────────────────
+    document.addEventListener('click', function(e) {
+        if (!adBlockEnabled) return;
+        let el = e.target.closest('a');
+        if (el && el.href) {
+            try {
+                let url = new URL(el.href);
+                if (url.hostname && url.hostname !== initHost && isAdUrl(el.href)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    incBlocked();
+                    history.pushState(null, '', location.href);
+                }
+            } catch(err) {}
+        }
+    }, true);
 
     // ─── 5. HLS.js buffer enhancement ───────────────────────────────────────
     (function patchHLS() {
@@ -214,16 +262,12 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
             #ang-addr:active { background:rgba(255,255,255,0.1); }
             #ang-lock { font-size:12px; flex-shrink:0; }
             #ang-url-t { flex:1; font-size:13px; color:var(--brave-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-            #ang-sh { position:relative; display:flex; align-items:center; justify-content:center;
-                width:42px; height:40px; border-radius:10px; background:var(--brave-orange-dim);
+            #ang-sh-toggle { position:relative; display:flex; align-items:center; justify-content:center;
+                height:40px; border-radius:10px; background:var(--brave-orange-dim);
                 border:1px solid rgba(251,84,43,0.25); cursor:pointer; flex-shrink:0;
-                -webkit-tap-highlight-color:transparent; }
-            #ang-sh:active { transform:scale(0.9); }
-            #ang-shields-badge { position:absolute; top:2px; right:2px; background:var(--brave-orange); color:#fff;
-                font-size:9px; font-weight:700; min-width:16px; height:16px; border-radius:8px;
-                display:none; align-items:center; justify-content:center; padding:0 3px;
-                transition:transform 0.15s cubic-bezier(0.34,1.56,0.64,1); }
-            #ang-shields-badge.visible { display:flex; }
+                padding: 0 10px; gap: 6px; color: var(--brave-orange); font-size: 13px; font-weight: 700;
+                -webkit-tap-highlight-color:transparent; transition: all 0.2s; white-space: nowrap; }
+            #ang-sh-toggle:active { transform:scale(0.95); }
             #ang-menu { display:flex; align-items:center; justify-content:center; width:40px; height:40px;
                 border-radius:10px; background:transparent; border:none; cursor:pointer; color:var(--brave-muted);
                 -webkit-tap-highlight-color:transparent; flex-shrink:0; }
@@ -242,13 +286,12 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
             .ang-bb-i { font-size:20px; line-height:1; }
             .ang-bb-l { font-size:10px; font-weight:500; }
             /* Panels */
-            #ang-sh-panel, #ang-m-panel {
+            #ang-m-panel {
                 position:fixed; top:58px; right:10px; z-index:2147483647;
                 background:rgba(12,12,22,0.98); border:1px solid var(--brave-border);
                 border-radius:16px; backdrop-filter:blur(20px); display:none; flex-direction:column;
                 box-shadow:0 8px 32px rgba(0,0,0,0.6); }
-            #ang-sh-panel.v, #ang-m-panel.v { display:flex; }
-            #ang-sh-panel { width:min(280px,90vw); padding:16px; gap:12px; }
+            #ang-m-panel.v { display:flex; }
             #ang-m-panel { width:min(200px,80vw); overflow:hidden; }
             .ang-mi { display:flex; align-items:center; gap:12px; padding:14px 16px; font-size:14px;
                 color:var(--brave-text); cursor:pointer; border:none; background:transparent; width:100%; text-align:left;
@@ -286,20 +329,22 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         // URL tooltip
         const tip = document.createElement('div'); tip.id='ang-url-tip'; tip.textContent = location.href;
 
-        // Shields
-        const sh = document.createElement('div'); sh.id='ang-sh'; sh.title='Brave Shields';
-        sh.innerHTML = '<span style="font-size:18px">🛡️</span><span id="ang-shields-badge">0</span>';
+        // Shields Toggle
+        const shBtn = document.createElement('button'); shBtn.id='ang-sh-toggle';
+        shBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            adBlockEnabled = !adBlockEnabled;
+            localStorage.setItem('anihub_adblock_enabled', adBlockEnabled);
+            applyAdStyle();
+            updateShieldUI();
+        });
 
         // Menu
         const menu = document.createElement('div'); menu.id='ang-menu';
         menu.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
 
         chrome.appendChild(backBtn); chrome.appendChild(fwdBtn); chrome.appendChild(refBtn);
-        chrome.appendChild(addr); chrome.appendChild(sh); chrome.appendChild(menu);
-
-        // Shields panel
-        const shPanel = document.createElement('div'); shPanel.id='ang-sh-panel';
-        shPanel.innerHTML = '<b style="font-size:15px;color:var(--brave-text)">🛡️ Brave Shields</b><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--brave-text)"><span>Ads & Trackers Blocked</span><span id="ang-panel-count" style="background:var(--brave-orange-dim);color:var(--brave-orange);font-weight:700;padding:2px 10px;border-radius:20px">0</span></div>';
+        chrome.appendChild(addr); chrome.appendChild(shBtn); chrome.appendChild(menu);
 
         // Menu panel
         const mPanel = document.createElement('div'); mPanel.id='ang-m-panel';
@@ -321,7 +366,6 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         // Mount
         document.documentElement.insertBefore(chrome, document.body);
         document.body.appendChild(tip);
-        document.body.appendChild(shPanel);
         document.body.appendChild(mPanel);
         document.body.appendChild(bot);
 
@@ -329,10 +373,12 @@ const BRAVE_CHROME_SCRIPT: &str = r#"
         let tipOpen = false;
         addr.addEventListener('click', () => { tipOpen=!tipOpen; tip.textContent=location.href; tip.style.opacity=tipOpen?'1':'0'; });
         document.addEventListener('click', e => { if(!addr.contains(e.target)){tipOpen=false;tip.style.opacity='0';} });
-        sh.addEventListener('click', e => { e.stopPropagation(); mPanel.classList.remove('v'); shPanel.classList.toggle('v'); });
-        menu.addEventListener('click', e => { e.stopPropagation(); shPanel.classList.remove('v'); mPanel.classList.toggle('v'); });
-        document.addEventListener('click', e => { if(!sh.contains(e.target)) shPanel.classList.remove('v'); if(!menu.contains(e.target)) mPanel.classList.remove('v'); });
+        menu.addEventListener('click', e => { e.stopPropagation(); mPanel.classList.toggle('v'); });
+        document.addEventListener('click', e => { if(!menu.contains(e.target)) mPanel.classList.remove('v'); });
         window.addEventListener('popstate', () => { urlT.textContent=location.hostname||location.href; tip.textContent=location.href; lock.textContent=location.protocol==='https:'?'🔒':'⚠️'; lock.style.color=location.protocol==='https:'?'var(--brave-green)':'var(--brave-orange)'; });
+        
+        // Init shield UI
+        updateShieldUI();
     }
 
     if (document.readyState === 'loading') {

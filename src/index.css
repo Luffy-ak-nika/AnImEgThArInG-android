@@ -525,3 +525,9 @@ nav button, .fab, .btn-primary, .btn-ghost {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* Bottom sheet slide-up animation */
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}

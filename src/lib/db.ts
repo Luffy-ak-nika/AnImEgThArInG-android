@@ -329,3 +329,65 @@ export async function siteCount(): Promise<number> {
   );
   return rows[0]?.count ?? 0;
 }
+
+/**
+ * Upsert a custom site — if a site with the same name (case-insensitive) already exists,
+ * merge its domains (add only new URLs that don't already exist).
+ * If it doesn't exist, insert a brand-new custom site with all its domains.
+ * Returns { isNew: boolean, siteId: number }
+ */
+export async function upsertCustomSite(
+  name: string,
+  icon: string,
+  domains: { url: string; isActive: boolean }[]
+): Promise<{ isNew: boolean; siteId: number }> {
+  const database = await getDb();
+
+  // Check if a custom site with the same name already exists (case-insensitive)
+  const existing: { id: number }[] = await database.select(
+    "SELECT id FROM sites WHERE LOWER(name) = LOWER(?) AND is_custom = 1 LIMIT 1",
+    [name]
+  );
+
+  if (existing.length > 0) {
+    const siteId = existing[0].id;
+
+    // Get existing domain URLs for this site
+    const existingDomains: { url: string }[] = await database.select(
+      "SELECT url FROM domains WHERE site_id = ?",
+      [siteId]
+    );
+    const existingUrls = new Set(existingDomains.map((d) => d.url.toLowerCase()));
+
+    // Get current max position
+    const posRows: { maxPos: number | null }[] = await database.select(
+      "SELECT MAX(position) as maxPos FROM domains WHERE site_id = ?",
+      [siteId]
+    );
+    let nextPos = (posRows[0]?.maxPos ?? -1) + 1;
+
+    // Insert only domains that don't already exist
+    let addedCount = 0;
+    for (const domain of domains) {
+      if (!existingUrls.has(domain.url.toLowerCase())) {
+        await database.execute(
+          "INSERT INTO domains (site_id, url, is_active, position) VALUES (?, ?, ?, ?)",
+          [siteId, domain.url, domain.isActive ? 1 : 0, nextPos]
+        );
+        nextPos++;
+        addedCount++;
+      }
+    }
+
+    // Update icon if provided and different
+    if (icon) {
+      await database.execute("UPDATE sites SET icon = ? WHERE id = ?", [icon, siteId]);
+    }
+
+    return { isNew: false, siteId };
+  }
+
+  // Not found — insert new custom site
+  const siteId = await insertSite(name, icon, true, domains);
+  return { isNew: true, siteId };
+}

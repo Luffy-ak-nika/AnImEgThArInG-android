@@ -18,6 +18,7 @@ import {
   deleteSite as dbDeleteSite,
   upsertFavorite as dbUpsertFavorite,
   updateFavoriteProgress as dbUpdateFavoriteProgress,
+  upsertCustomSite as dbUpsertCustomSite,
 } from "@/lib/db";
 import { DEFAULT_SITES } from "@/lib/sites";
 import {
@@ -73,8 +74,17 @@ interface AppContextValue {
     siteId: number | null,
     siteName: string,
     lastEpisode: string,
-    pageUrl: string
+    pageUrl: string,
+    watchedEpisodes?: number,
+    totalEpisodes?: number,
+    status?: WatchStatus,
+    notes?: string
   ) => Promise<void>;
+  importCustomSite: (
+    name: string,
+    icon: string,
+    domains: { url: string; isActive: boolean }[]
+  ) => Promise<{ isNew: boolean; siteId: number }>;
   updateFavoriteProgress: (
     id: number,
     watchedEpisodes: number,
@@ -275,16 +285,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       siteId: number | null,
       siteName: string,
       lastEpisode: string,
-      pageUrl: string
+      pageUrl: string,
+      watchedEpisodes = 0,
+      totalEpisodes = 0,
+      status: WatchStatus = "watching",
+      notes = ""
     ) => {
       try {
-        await dbUpsertFavorite(title, thumbnail, siteId, siteName, lastEpisode, pageUrl);
+        await dbUpsertFavorite(title, thumbnail, siteId, siteName, lastEpisode, pageUrl, watchedEpisodes, totalEpisodes, status, notes);
         await refreshFavorites();
       } catch (err) {
         console.error("Failed to upsert favorite:", err);
       }
     },
     [refreshFavorites]
+  );
+
+  const importCustomSite = useCallback(
+    async (
+      name: string,
+      icon: string,
+      domains: { url: string; isActive: boolean }[]
+    ): Promise<{ isNew: boolean; siteId: number }> => {
+      const result = await dbUpsertCustomSite(name, icon, domains);
+      await refreshSites();
+      return result;
+    },
+    [refreshSites]
   );
 
   const updateFavoriteProgress = useCallback(
@@ -465,6 +492,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refreshFavorites,
         addToFavorites,
         upsertToFavorites,
+        importCustomSite,
         updateFavoriteProgress,
         removeFromFavorites,
         openWebviews,
