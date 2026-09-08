@@ -1,10 +1,43 @@
 import { X, Plus, Trash2, Edit3 } from "lucide-react";
 import { useApp, type SiteWithDomains } from "@/contexts/AppContext";
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 
 interface Props {
   site: SiteWithDomains;
   onClose: () => void;
+}
+
+// ── Draggable bottom-sheet hook ─────────────────────────────────────────────
+function useDragSheet(onDismiss: () => void) {
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startY = useRef(0);
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    if (touch.clientY - rect.top > 56) return;
+    startY.current = touch.clientY;
+    setIsDragging(true);
+  }, []);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const diff = e.touches[0].clientY - startY.current;
+    setDragOffset(Math.max(0, diff));
+  }, [isDragging]);
+
+  const onTouchEnd = useCallback(() => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    if (dragOffset > 120) {
+      onDismiss();
+    }
+    setDragOffset(0);
+  }, [isDragging, dragOffset, onDismiss]);
+
+  return { dragOffset, isDragging, onTouchStart, onTouchMove, onTouchEnd };
 }
 
 export default function EditDomainsDialog({ site, onClose }: Props) {
@@ -16,6 +49,7 @@ export default function EditDomainsDialog({ site, onClose }: Props) {
     }))
   );
   const [saving, setSaving] = useState(false);
+  const { dragOffset, isDragging, onTouchStart, onTouchMove, onTouchEnd } = useDragSheet(onClose);
 
   const addDomain = () => {
     setDomains([...domains, { url: "", isActive: false }]);
@@ -60,83 +94,240 @@ export default function EditDomainsDialog({ site, onClose }: Props) {
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 12,
+    border: "1.5px solid rgba(148,163,184,0.15)",
+    background: "var(--color-bg-hover)",
+    color: "var(--color-text-primary)",
+    fontSize: 14,
+    outline: "none",
+  };
+
   return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
+    <>
+      {/* Backdrop */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9000,
+          background: `rgba(0,0,0,${Math.max(0.1, 0.55 - dragOffset / 600)})`,
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+          transition: isDragging ? "none" : "background 0.3s",
+        }}
+        onClick={onClose}
+      />
+
+      {/* Bottom Sheet */}
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9001,
+          borderRadius: "24px 24px 0 0",
+          background: "var(--color-bg-secondary)",
+          borderTop: "1px solid rgba(148,163,184,0.12)",
+          maxHeight: "85dvh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          transform: `translateY(${dragOffset}px)`,
+          transition: isDragging ? "none" : "transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+          animation: isDragging ? "none" : "slideUpSheet 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+        }}
+      >
+        {/* Drag handle */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            paddingTop: 12,
+            paddingBottom: 8,
+            flexShrink: 0,
+            cursor: "grab",
+          }}
+        >
+          <div style={{ width: 40, height: 5, borderRadius: 3, background: "rgba(148,163,184,0.35)" }} />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-            <Edit3 size={18} className="text-[var(--color-accent-primary)]" />
-            Edit Domains — {site.icon} {site.name}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 20px",
+            marginBottom: 12,
+            flexShrink: 0,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: "var(--color-text-primary)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Edit3 size={18} color="#a855f7" />
+            Edit — {site.icon} {site.name}
           </h2>
           <button
-            className="p-1.5 rounded-lg hover:bg-[var(--color-bg-hover)] text-[var(--color-text-muted)]"
             onClick={onClose}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              border: "none",
+              background: "var(--color-bg-hover)",
+              color: "var(--color-text-muted)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Info */}
-        <p className="text-xs text-[var(--color-text-muted)] mb-4">
-          Select the active domain (filled circle). This is the URL that opens when you click the site.
-        </p>
+        {/* ── Scrollable content body ── */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "0 20px",
+            WebkitOverflowScrolling: "touch",
+            overscrollBehavior: "contain",
+          }}
+        >
+          <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 12 }}>
+            Select the active domain (filled circle). This is the URL that opens when you click the site.
+          </p>
 
-        {/* Domains */}
-        <div className="space-y-2">
-          {domains.map((domain, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <button
-                className={`shrink-0 w-5 h-5 rounded-full border-2 transition-colors
-                  ${
-                    domain.isActive
-                      ? "border-[var(--color-accent-primary)] bg-[var(--color-accent-primary)]"
-                      : "border-[var(--color-border-default)] hover:border-[var(--color-text-muted)]"
-                  }`}
-                onClick={() => setActive(i)}
-                title="Set as active domain"
-              />
-              <input
-                className="input-glass flex-1"
-                placeholder="https://example.com"
-                value={domain.url}
-                onChange={(e) => updateDomainUrl(i, e.target.value)}
-              />
-              {domains.length > 1 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {domains.map((domain, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <button
-                  className="p-2 text-[var(--color-text-muted)] hover:text-red-400 transition-colors"
-                  onClick={() => removeDomain(i)}
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-          ))}
+                  onClick={() => setActive(i)}
+                  title="Set as active domain"
+                  style={{
+                    flexShrink: 0,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    border: `2px solid ${domain.isActive ? "var(--color-accent-primary)" : "var(--color-border-default)"}`,
+                    background: domain.isActive ? "var(--color-accent-primary)" : "transparent",
+                    cursor: "pointer",
+                    WebkitTapHighlightColor: "transparent",
+                    padding: 0,
+                  }}
+                />
+                <input
+                  style={{ ...inputStyle, flex: 1 }}
+                  placeholder="https://example.com"
+                  value={domain.url}
+                  onChange={(e) => updateDomainUrl(i, e.target.value)}
+                />
+                {domains.length > 1 && (
+                  <button
+                    onClick={() => removeDomain(i)}
+                    style={{
+                      padding: 10,
+                      color: "var(--color-text-muted)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      WebkitTapHighlightColor: "transparent",
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={addDomain}
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 13,
+              color: "var(--color-accent-primary)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "8px 0",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <Plus size={14} />
+            Add another domain
+          </button>
         </div>
 
-        <button
-          className="mt-3 flex items-center gap-1 text-xs text-[var(--color-accent-primary)]
-            hover:text-[var(--color-accent-tertiary)] transition-colors"
-          onClick={addDomain}
+        {/* ── STICKY footer buttons ── */}
+        <div
+          style={{
+            flexShrink: 0,
+            padding: "12px 20px",
+            paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
+            borderTop: "1px solid rgba(148,163,184,0.08)",
+            background: "var(--color-bg-secondary)",
+            display: "flex",
+            gap: 10,
+          }}
         >
-          <Plus size={12} />
-          Add another domain
-        </button>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 mt-6">
-          <button className="btn-ghost" onClick={onClose}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1,
+              padding: "14px",
+              borderRadius: 12,
+              border: "1px solid var(--color-border-default)",
+              background: "transparent",
+              color: "var(--color-text-muted)",
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
             Cancel
           </button>
           <button
-            className="btn-primary"
             onClick={handleSave}
             disabled={saving}
+            style={{
+              flex: 1,
+              padding: "14px",
+              borderRadius: 12,
+              border: "none",
+              background: saving ? "rgba(168,85,247,0.4)" : "linear-gradient(135deg, #a855f7, #6366f1)",
+              color: "white",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: saving ? "not-allowed" : "pointer",
+              WebkitTapHighlightColor: "transparent",
+            }}
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
